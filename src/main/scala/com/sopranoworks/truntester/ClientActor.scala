@@ -1,14 +1,15 @@
+package com.sopranoworks.truntester
+
 import java.net.InetSocketAddress
 import java.util.UUID
 
-import akka.actor.{Actor, ActorLogging, ActorRef, FSM, Props}
+import akka.actor.{ActorRef, FSM, Props}
 import akka.util.ByteString
-import kamon.Kamon
-import org.ice4j.{Transport, TransportAddress}
 import org.ice4j.attribute._
 import org.ice4j.message.{ChannelData, Message, MessageFactory, Request}
 import org.ice4j.security.{LongTermCredential, LongTermCredentialSession}
 import org.ice4j.stack.StunStack
+import org.ice4j.{Transport, TransportAddress}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
@@ -25,11 +26,12 @@ object Phase extends Enumeration {
   val CHANNEL_BIND = Value
   val WAITING_HOST = Value
   val RUNNING = Value
+  val STOP = Value
 }
 
 
 
-class ClientActor(username:String, realm:String, password:String, turnServer:InetSocketAddress, messageInterval:Int, messageSize:Int, host:Option[ActorRef] = None) extends FSM[Phase.Value,Int] {
+class ClientActor(username:String, realm:String, password:String, turnServer:InetSocketAddress, messageInterval:Int, messageSize:Int, host:Option[ActorRef] = None, observer:Option[ActorRef] = None) extends FSM[Phase.Value,Int] {
   import Phase._
   import UUIDUtil._
   private val _stack = new StunStack()
@@ -42,15 +44,17 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
 
   _session.setNonce(UUID.randomUUID().asByteArray)
 
-  private val _udpPort = context.system.actorOf(Props(new UdpPort(turnServer,self)))
+  private val _udpPort = context.system.actorOf(Props(new UdpPort(turnServer,self)),s"${self.path.name}UdpPort")
 
-  private var _nonce:Option[Array[Byte]] = None
+//  private var _nonce:Option[Array[Byte]] = None
+  private var _nonce:Option[NonceAttribute] = None
+  private var _realm:Option[RealmAttribute] = None
   private var _lastTransactionId:Array[Byte] = _
 
   private val _message = ByteString(new Array[Byte](messageSize))
 
-  private val _sentCounter = Kamon.metrics.counter("num_sent")
-  private val _receivedCounter = Kamon.metrics.counter("num_received")
+//  private val _sentCounter = Kamon.metrics.counter("num_sent")
+//  private val _receivedCounter = Kamon.metrics.counter("num_received")
 
   private object Retry
   private object Refresh
@@ -60,19 +64,17 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
     val trId = UUID.randomUUID().asByteArray.take(12)
     req.setTransactionID(trId)
     _lastTransactionId = trId
-//    req.setTransactionID(UUID.randomUUID().asByteArray.take(16))
-//    _session.addAttributes(req)
-//    req.removeAttribute(Attribute.MESSAGE_INTEGRITY)
     _nonce.foreach {
       n =>
-        req.putAttribute(AttributeFactory.createNonceAttribute(n))
+        req.putAttribute(n)
+        _realm.foreach(req.putAttribute(_))
+        req.putAttribute(AttributeFactory.createUsernameAttribute(username))
         val a = new TrueMessageIntegrityAttribute()
         a.setUsername(username)
         a.setRealm(realm)
         a.setPassword(password)
         req.putAttribute(a)
     }
-
     _udpPort ! ByteString(req.encode(_stack))
   }
 
@@ -85,7 +87,6 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
   def sendAllocateMessage():Unit = {
     val req = MessageFactory.createAllocateRequest()
     req.putAttribute(AttributeFactory.createLifetimeAttribute(180))
-//    req.putAttribute(AttributeFactory.createRequestedAddressFamilyAttribute(1))
     req.putAttribute(AttributeFactory.createRequestedTransportAttribute(17))
     sendRequest(req)
   }
@@ -113,10 +114,14 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
     sendRequest(req)
   }
 
-  override def preStart(): Unit = {
-//    context.system.scheduler.schedule(Duration(10,"s"),Duration(10,"s"),self,Retry)(context.dispatcher)
+//  override def preStart(): Unit = {
+//    setTimer("ping",Retry,Duration(10,"s"))
+//  }
+
+  def setRetry():Unit = {
     setTimer("ping",Retry,Duration(10,"s"))
   }
+
 
   startWith(WAIT,0)
 
@@ -163,6 +168,7 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
       } else {
         log.error("STUN bind request failure")
         log.error(ErrorCodeAttribute.getDefaultReasonPhrase(res.getAttribute(Attribute.ERROR_CODE).asInstanceOf[ErrorCodeAttribute].getErrorCode))
+        setRetry()
         stay()
       }
 
@@ -180,7 +186,7 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
         if (res.containsAttribute(Attribute.XOR_RELAYED_ADDRESS)) {
           val addr:TransportAddress = res.getAttribute(Attribute.XOR_RELAYED_ADDRESS).asInstanceOf[XorRelayedAddressAttribute].getAddress(_lastTransactionId)
           _relayedEndpoint = Some(new InetSocketAddress(addr.getAddress,addr.getPort))
-//          log.info(s"Relay:${_relayedEndpoint.get}")
+          log.info(s"Relay:${_relayedEndpoint.get}")
           setTimer("refresh",Refresh,Duration(60,"s"),true)
 //          res.getAttributes.asScala.foreach(a=>log.info(a.getName))
           _turnMappedEndpoint.foreach(_ => sendCreatePermission())
@@ -194,14 +200,17 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
         log.error(ErrorCodeAttribute.getDefaultReasonPhrase(res.getAttribute(Attribute.ERROR_CODE).asInstanceOf[ErrorCodeAttribute].getErrorCode))
         log.info(s"response type:${res.getMessageType.toInt}")
         if (res.containsAttribute(Attribute.NONCE)) {                                                  
-          log.info("contains NONCE")
-          _nonce = Some(res.getAttribute(Attribute.NONCE).asInstanceOf[NonceAttribute].getNonce)
+          _nonce = Some(res.getAttribute(Attribute.NONCE).asInstanceOf[NonceAttribute])
         }
         if (res.containsAttribute(Attribute.REALM)) {
-          log.info("contains REALM")
-//          _nonce = Some(res.getAttribute(Attribute.NONCE).asInstanceOf[NonceAttribute].getNonce)
+          _realm = Some(res.getAttribute(Attribute.REALM).asInstanceOf[RealmAttribute])
         }
+//        if (res.containsAttribute(Attribute.SOFTWARE)) {
+//          val soft = new String(res.getAttribute(Attribute.SOFTWARE).asInstanceOf[SoftwareAttribute].getSoftware)
+//          log.info(s"Software:$soft")
+//        }
         res.getAttributes.asScala.foreach(a=>log.info(a.getName))
+        setRetry()
         stay()
       }
     case Event(Retry,_) =>
@@ -225,6 +234,7 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
       } else {
         log.error("TURN Create Permission request error")
         log.error(ErrorCodeAttribute.getDefaultReasonPhrase(res.getAttribute(Attribute.ERROR_CODE).asInstanceOf[ErrorCodeAttribute].getErrorCode))
+        setRetry()
         stay()
       }
     case Event(Retry,_) =>
@@ -246,6 +256,7 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
       } else {
         log.error("TURN Channel Bind request error")
         log.error(ErrorCodeAttribute.getDefaultReasonPhrase(res.getAttribute(Attribute.ERROR_CODE).asInstanceOf[ErrorCodeAttribute].getErrorCode))
+        setRetry()
         stay()
       }
   }
@@ -257,12 +268,14 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
       _turnMappedEndpoint = Some(addr)
       setTimer("send",Send,Duration(messageInterval,"ms"),true)
 //      log.info("Running")
+      observer.foreach(_ ! RUNNING)
       goto(RUNNING)
   }
 
   when(RUNNING) {
     case Event(bytes:ByteString,_) =>
-      _receivedCounter.increment()
+//      _receivedCounter.increment()
+      log.info(s"${bytes.length} bytes received")
       stay()
     case Event(Send,_) =>
       host match {
@@ -274,12 +287,17 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
           data.setData(_message.toArray)
           _udpPort ! ByteString(data.encode())
       }
-      _sentCounter.increment()
+//      _sentCounter.increment()
       stay()
     case Event(Refresh,_) =>
       if (host.isEmpty) {
         sendRefresh()
       }
+      stay()
+
+    case Event(STOP,_) =>
+      log.info("Stopping ")
+      stop()
       stay()
 
   }
@@ -289,6 +307,8 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
       val res = Message.decode(bytes.toArray,0,bytes.length.toChar)
       if (res != null) {
         self ! res
+      } else {
+        log.warning("Unknown Message received")
       }
       stay()
     case Event(addr:InetSocketAddress,_) =>

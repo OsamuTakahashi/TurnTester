@@ -1,8 +1,10 @@
+package com.sopranoworks.truntester
+
 import java.net.InetSocketAddress
 
 import akka.actor.{ActorSystem, Props}
 import com.typesafe.config.ConfigFactory
-import kamon.Kamon
+//import kamon.Kamon
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -10,11 +12,11 @@ import scala.concurrent.duration.Duration
 /**
   * Created by takahashi on 2017/05/26.
   */
-object Main extends App {
+object TurnTesterMain extends App {
   val config = ConfigFactory.load()
   val system = ActorSystem()
 
-  Kamon.start()
+//  Kamon.start()
 
   val turn = new InetSocketAddress(config.getString("turn.host"),config.getInt("turn.port"))
   val messageInterval = config.getInt("tester.message_interval")

@@ -1,6 +1,9 @@
+package com.sopranoworks.truntester
+
+import java.security.MessageDigest
+
 import org.ice4j.attribute.{Attribute, MessageIntegrityAttribute}
 import org.ice4j.stack.StunStack
-import java.security.MessageDigest
 
 /**
   * Created by takahashi on 2017/05/26.

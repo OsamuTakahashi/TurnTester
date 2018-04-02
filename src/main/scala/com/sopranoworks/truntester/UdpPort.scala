@@ -1,4 +1,6 @@
-import java.net.{InetAddress, InetSocketAddress}
+package com.sopranoworks.truntester
+
+import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import akka.io.{IO, Udp}
@@ -24,11 +26,11 @@ class UdpPort(remote: InetSocketAddress,listener:ActorRef) extends Actor with Ac
       listener ! data
 
     case bytes: ByteString =>
-//      log.info("send to remote")
+//      log.info(s"send to remote{$remote}")
       send ! Udp.Send(bytes, remote)
 
     case (addr:InetSocketAddress,bytes:ByteString) =>
-//      log.info("send to remote via relay")
+//      log.info(s"send to remote via relay($addr)")
       send ! Udp.Send(bytes, addr)
   }
 }

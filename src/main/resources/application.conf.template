@@ -1,0 +1,14 @@
+tester {
+  message_size = 1024
+  message_interval = 1000  // ms
+  num_clients = 1
+}
+
+turn {
+  host = ""
+  port = 0
+
+  username = ""
+  realm = ""
+  password = ""
+}

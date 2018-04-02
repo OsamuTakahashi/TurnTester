@@ -5,7 +5,7 @@ scalaVersion := "2.12.2"
 // https://mvnrepository.com/artifact/org.jitsi/ice4j
 libraryDependencies += "org.jitsi" % "ice4j" % "1.0"
 
-val akkaVersion = "2.4.17"
+val akkaVersion = "2.5.6"
 
 val akkaLibraries = Seq(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion,
@@ -17,30 +17,52 @@ val akkaLibraries = Seq(
 
 libraryDependencies ++= akkaLibraries
 
-val kamonVersion = "0.6.5"
-val kamonOldVersion = "0.6.3"
-
-val kamonLibraries = Seq(
-  "io.kamon" %% "kamon-core" % kamonVersion,
-  "io.kamon" %% "kamon-scala" % kamonVersion,
-  "io.kamon" %% "kamon-log-reporter" % kamonVersion,
-  "org.aspectj" %  "aspectjweaver" % "1.8.10"
-)
-
-libraryDependencies ++= kamonLibraries
+//val kamonVersion = "0.6.5"
+//val kamonOldVersion = "0.6.3"
+//
+//val kamonLibraries = Seq(
+//  "io.kamon" %% "kamon-core" % kamonVersion,
+//  "io.kamon" %% "kamon-scala" % kamonVersion,
+//  "io.kamon" %% "kamon-log-reporter" % kamonVersion,
+//  "org.aspectj" %  "aspectjweaver" % "1.8.10"
+//)
+//
+//libraryDependencies ++= kamonLibraries
 
 enablePlugins(JavaServerAppPackaging,RpmPlugin,UniversalPlugin,LinuxPlugin)
 
 name := "turn-tester"
 
-version := "0.1"
+organization := "com.sopranoworks"
+
+version := "0.2-SNAPSHOT"
 
 bashScriptExtraDefines += """addJava "-javaagent:${lib_dir}/org.aspectj.aspectjweaver-1.8.10.jar""""
 
-publishArtifact in (Compile, packageDoc) := false
+//publishArtifact in (Compile, packageDoc) := false
+//
+//publishArtifact in packageDoc := false
+//
+//publishArtifact in packageSrc := false
+//
+//sources in (Compile,doc) := Seq.empty
 
-publishArtifact in packageDoc := false
-
-publishArtifact in packageSrc := false
-
-sources in (Compile,doc) := Seq.empty
+pomExtra :=
+  <url>https://github.com/OsamuTakahashi/TurnTester</url>
+    <licenses>
+      <license>
+        <name>MIT</name>
+        <url>https://opensource.org/licenses/MIT</url>
+      </license>
+    </licenses>
+    <scm>
+      <url>https://github.com/OsamuTakahashi/TurnTester</url>
+      <connection>https://github.com/OsamuTakahashi/TurneTester.git</connection>
+    </scm>
+    <developers>
+      <developer>
+        <id>OsamuTakahashi</id>
+        <name>Osamu Takahashi</name>
+        <url>https://github.com/OsamuTakahashi/</url>
+      </developer>
+    </developers>
