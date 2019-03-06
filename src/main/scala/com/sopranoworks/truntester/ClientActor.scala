@@ -44,7 +44,7 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
 
   _session.setNonce(UUID.randomUUID().asByteArray)
 
-  private val _udpPort = context.system.actorOf(Props(new UdpPort(turnServer,self)),s"${self.path.name}UdpPort")
+  private val _udpPort = context.system.actorOf(Props(new UdpPort(turnServer,self)),s"UdpPort${self.path.name}")
 
 //  private var _nonce:Option[Array[Byte]] = None
   private var _nonce:Option[NonceAttribute] = None
@@ -252,6 +252,7 @@ class ClientActor(username:String, realm:String, password:String, turnServer:Ine
         cancelTimer("ping")
         _guest.foreach(_ ! _relayedEndpoint.get)
 //        log.info("Running")
+        observer.foreach(_ ! RUNNING)
         goto(RUNNING)
       } else {
         log.error("TURN Channel Bind request error")

@@ -29,7 +29,7 @@ libraryDependencies ++= akkaLibraries
 //
 //libraryDependencies ++= kamonLibraries
 
-enablePlugins(JavaServerAppPackaging,RpmPlugin,UniversalPlugin,LinuxPlugin)
+enablePlugins(JavaAppPackaging,RpmPlugin,UniversalPlugin,LinuxPlugin)
 
 name := "turn-tester"
 
@@ -37,7 +37,9 @@ organization := "com.sopranoworks"
 
 version := "0.2-SNAPSHOT"
 
-bashScriptExtraDefines += """addJava "-javaagent:${lib_dir}/org.aspectj.aspectjweaver-1.8.10.jar""""
+//bashScriptExtraDefines += """addJava "-javaagent:${lib_dir}/org.aspectj.aspectjweaver-1.8.10.jar""""
+
+bashScriptExtraDefines += """addJava "-Dconfig.file=${app_home}/../conf/application.conf""""
 
 //publishArtifact in (Compile, packageDoc) := false
 //
@@ -46,6 +48,12 @@ bashScriptExtraDefines += """addJava "-javaagent:${lib_dir}/org.aspectj.aspectjw
 //publishArtifact in packageSrc := false
 //
 //sources in (Compile,doc) := Seq.empty
+
+mappings in (Compile, packageBin) ~= { (ms: Seq[(File, String)]) =>
+  ms filterNot { case (file, dest) =>
+    dest.contains("application.conf")
+  }
+}
 
 pomExtra :=
   <url>https://github.com/OsamuTakahashi/TurnTester</url>
